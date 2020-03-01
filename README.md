@@ -2,6 +2,7 @@
 
 This is a library update for the SparkFun LTE Cat M1/NB-IoT Shield.
 I have added a readSMS function that reads SMS messages that are saved to the shield.
+The clear message function is working. Calling lte.clearMessages() erases all messages from the shield. 
 I have included an example sketch to get it working.
 
 You will need to buy a phone number through Hologram for this to work properly. It cost me $1/month to secure the number. 
@@ -29,9 +30,8 @@ The readSMS function takes in one parameter, the index you want to retrieve a me
 index or you won't get anything useful out of it. I wanted to get this up for others to use and tinker with, so there may be bugs I 
 didn't catch. 
 
+The clearMessages function does not need any parameters. When called, it clears all messages from the SARA modem.
+
 This was a volunteer effort to help others better use their shields and make cool stuff. 
 
-In the future I will add a function to clear messages from the modem so keywords can be sent to the device and events can be triggered,
-where the messages will be cleared so your gadget will only have to look for a message at index 0. This will also stop spammers from
-changing the index on you and ruining your project. Other things to work on are new message indication (ring) and error handling for
-invalid message indices. 
+Other things to work on are new message indication (ring) and error handling for invalid message indices. 
