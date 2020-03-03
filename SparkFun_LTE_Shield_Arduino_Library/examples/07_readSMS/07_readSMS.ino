@@ -1,5 +1,5 @@
 /*
-  Send an SMS with the SparkFun LTE Cat M1/NB-IoT Shield
+  Read an SMS with the SparkFun LTE Cat M1/NB-IoT Shield
   By: Don Hagen
   Date: February 29, 2020
 

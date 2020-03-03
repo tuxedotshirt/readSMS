@@ -97,6 +97,12 @@ typedef enum
     LTE_SHIELD_REGISTRATION_ROAMING_CSFB_NOT_PREFERRED = 9
 } LTE_Shield_registration_status_t;
 
+struct SMS
+{
+	String phoneNumber = "";
+	String message = "";
+};
+
 struct DateData
 {
     uint8_t day;
@@ -235,8 +241,10 @@ public:
     // SMS -- Short Messages Service
     LTE_Shield_error_t setSMSMessageFormat(lte_shield_message_format_t textMode = LTE_SHIELD_MESSAGE_FORMAT_TEXT);
     LTE_Shield_error_t sendSMS(String number, String message);
+	//String readSMS(String index, char *message);
 	String readSMS(String index);
-	LTE_Shield_error_t clearMessages(void);
+	SMS getSMS(String index);
+	LTE_Shield_error_t clearMessages(String flag);
 	
     // V24 Control and V25ter (UART interface) AT commands
     LTE_Shield_error_t setBaud(unsigned long baud);

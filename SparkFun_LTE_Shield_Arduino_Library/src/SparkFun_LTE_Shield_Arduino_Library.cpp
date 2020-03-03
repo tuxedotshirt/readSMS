@@ -70,7 +70,7 @@ const char LTE_SHIELD_LISTEN_SOCKET[] = "+USOLI";  // Listen for connection on s
 const char LTE_SHIELD_MESSAGE_FORMAT[] = "+CMGF"; // Set SMS message format
 const char LTE_SHIELD_SEND_TEXT[] = "+CMGS";      // Send SMS message
 const char LTE_SHIELD_READ_TEXT[] = "+CMGR=";	  // Read SMS message. Format: AT+CMGR=<index>
-const char LTE_SHIELD_CLEAR_MESSAGES[] = "+CMGD=0,4"; //Clear all SMS messages
+const char LTE_SHIELD_CLEAR_MESSAGES[] = "+CMGD=0,"; //Clear SMS messages "+CMGD=0,<flag>"
 // ### GPS
 const char LTE_SHIELD_GPS_POWER[] = "+UGPS";
 const char LTE_SHIELD_GPS_REQUEST_LOCATION[] = "+ULOC";
@@ -1004,12 +1004,25 @@ LTE_Shield_error_t LTE_Shield::setSMSMessageFormat(lte_shield_message_format_t t
     return err;
 }
 
-LTE_Shield_error_t LTE_Shield::clearMessages(void)
+LTE_Shield_error_t LTE_Shield::clearMessages(String flag)
 {
-	//command: AT+CMGD=0,4
-	//+CMGD is the delete command, 0 is an index and 4 is the delete all flag
+	/*
+	command: AT+CMGD=0,x
+	+CMGD is the delete command, 0 is an arbitrary index and x is a flag
+	0 (default value): delete the message specified in <index>
+	1: delete all the read messages from the preferred message storage, leaving unread
+		messages and stored mobile originated messages (whether sent or not) untouched
+	2: delete all the read messages from the preferred message storage and
+		sent mobile originated messages, leaving unread messages and unsent mobile
+		originated messages untouched
+	3: delete all the read messages from the preferred message storage, sent and
+		unsent mobile originated messages leaving unread messages untouched
+	4: delete all the messages from the preferred message storage including unread
+		messages
+	*/
 	char *command;
 	char *response;
+	char *flagCStr;
 	LTE_Shield_error_t err;
 
 	//allocate memory for command
@@ -1026,7 +1039,18 @@ LTE_Shield_error_t LTE_Shield::clearMessages(void)
         return LTE_SHIELD_ERROR_OUT_OF_MEMORY;
     }
 	
-	sprintf(command, "%s", LTE_SHIELD_CLEAR_MESSAGES);
+	//allocate memory for indexCStr
+	flagCStr = lte_calloc_char(flag.length() +2);
+	if(flagCStr == NULL){
+		free(command);
+		free(response);
+		return LTE_SHIELD_ERROR_OUT_OF_MEMORY;
+	}
+	
+	//fill char array with index value
+	flag.toCharArray(flagCStr, flag.length() + 1);
+	
+	sprintf(command, "%s%s", LTE_SHIELD_CLEAR_MESSAGES, flagCStr);
 	
 	err = sendCommandWithResponse(command, LTE_SHIELD_RESPONSE_OK,
                                   response, LTE_SHIELD_STANDARD_RESPONSE_TIMEOUT);
@@ -1035,11 +1059,110 @@ LTE_Shield_error_t LTE_Shield::clearMessages(void)
 		free(command);
 		return err;
 	}
+	
 	free(command);
 	free(response);
+	free(flagCStr);
 	
 	return err;
+}
+
+SMS LTE_Shield::getSMS(String index)
+{
+	char *command;
+	char *indexCStr;
+	char *msgBegin;
+    char *msgEnd;
+	char *response;
+	LTE_Shield_error_t err;
+	String errorString = "";
+	SMS sms;
 	
+	//allocate memory for indexCStr
+	indexCStr = lte_calloc_char(index.length() +2);
+	if(indexCStr == NULL){
+		errorString = "Memory allocation failed: indexCStr";
+		Serial.println(errorString);
+		return sms;
+	}
+	//fill char array with index value
+	index.toCharArray(indexCStr, index.length() + 1);
+	
+	//allocate memory for command
+	command = lte_calloc_char(strlen(LTE_SHIELD_READ_TEXT) + strlen(indexCStr) + 8);
+	if (command == NULL){
+		free(indexCStr);
+        errorString = "Memory allocation failed: command";
+		Serial.println(errorString);
+		return sms;
+	}
+	
+    //should output "+CMGR=<index>"
+	sprintf(command, "%s%s", LTE_SHIELD_READ_TEXT, indexCStr);
+		
+	//allocate memory for response
+	response = lte_calloc_char(200);
+    if (response == NULL)
+    {
+        free(command);
+		free(indexCStr);
+        errorString = "Memory allocation failed: response";
+		Serial.println(errorString);
+		return sms;
+    }
+
+	err = sendCommandWithResponse(command, LTE_SHIELD_RESPONSE_OK,
+                                  response, LTE_SHIELD_STANDARD_RESPONSE_TIMEOUT);
+	if (err != LTE_SHIELD_ERROR_SUCCESS){
+		free(response);
+		free(command);
+		free(indexCStr);
+		errorString = "No message at that index.";
+		Serial.println(errorString);
+		return sms;
+	}
+	//Response format: \r\n+CMGR: "+REC READ","phone number",,"YY/MM/DD,HH:MM:SS-TZ"\r\n data \r\n\r\nOK\r\n
+
+		msgBegin = strchr(response, '+'); // Find beginning of REC READ
+		msgBegin++;
+		msgBegin = strchr(msgBegin, '+'); // Find beginning of phone number
+		msgBegin++;
+		if (msgBegin == NULL)
+		{
+			free(command);
+			free(response);
+			free(indexCStr);
+			errorString = "msgBegin NULL";
+			Serial.println(errorString);
+			return sms;
+		}
+		msgEnd = strchr(msgBegin, '"'); // Find end of phone number
+    if (msgEnd == NULL)
+    {
+        free(command);
+        free(response);
+		free(indexCStr);
+		free(msgBegin);
+		free(msgEnd);
+        errorString = "msgEnd NULL";
+		Serial.println(errorString);
+		return sms;
+    }
+	
+    *(msgEnd) = '\0'; // Set last quote to null char -- end string
+	sms.phoneNumber = String(msgBegin);
+	
+	msgBegin += 38; //move through data fields in response
+	
+	msgEnd = strchr(msgBegin, '\0');
+	msgEnd -= 8; //walk back through "\r\n\r\nOK\r\n\0" to clean up response
+	*(msgEnd) = '\0';
+	sms.message = String(msgBegin);
+	free(command);
+    free(indexCStr);
+	free(response);
+
+	return sms;
 }
 
 String LTE_Shield::readSMS(String index)
@@ -1084,7 +1207,7 @@ String LTE_Shield::readSMS(String index)
 		free(response);
 		free(command);
 		free(indexCStr);
-		return "Error.";
+		return "No message at that index.";
 	}
 	//Response format: \r\n+CMGR: "REC READ","phone number",,"YY/MM/DD,HH:MM:SS-TZ"\r\n data \r\n\r\nOK\r\n
 
@@ -1108,11 +1231,12 @@ String LTE_Shield::readSMS(String index)
         return "msgEnd NULL";
     }
     *(msgEnd) = '\0'; // Set last quote to null char -- end string
-
+	
 	free(command);
     free(indexCStr);
 	free(response);
-	
+
+	//returns SMS string
 	return String(msgBegin);
 }
 
